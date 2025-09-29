@@ -1,0 +1,118 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-09-29 10:58:45.220696",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "section_break_oauth",
+  "client_id",
+  "client_secret",
+  "redirect_url",
+  "column_break_odvk",
+  "access_token",
+  "refresh_token",
+  "section_break_api",
+  "organization_id",
+  "column_break_quon",
+  "last_sync_date"
+ ],
+ "fields": [
+  {
+   "fieldname": "client_id",
+   "fieldtype": "Data",
+   "label": "Client ID",
+   "description": "Client ID from Zoho Developer Console"
+  },
+  {
+   "fieldname": "client_secret",
+   "fieldtype": "Password",
+   "label": "Client Secret",
+   "description": "Client Secret from Zoho Developer Console"
+  },
+  {
+   "fieldname": "redirect_url",
+   "fieldtype": "Data",
+   "label": "Redirect URL",
+   "description": "OAuth callback URL (must match Zoho Developer Console)",
+   "default": "http://antpos.local:8000/api/method/zoho_integration.auth.callback"
+  },
+  {
+   "fieldname": "refresh_token",
+   "fieldtype": "Password",
+   "label": "Refresh Token",
+   "description": "Auto-generated during OAuth setup"
+  },
+  {
+   "fieldname": "organization_id",
+   "fieldtype": "Data",
+   "label": "Organization ID",
+   "description": "Auto-detected from API response"
+  },
+  {
+   "description": "Auto-generated and refreshed during OAuth setup",
+   "fieldname": "access_token",
+   "fieldtype": "Password",
+   "label": "Access Token"
+  },
+  {
+   "fieldname": "last_sync_date",
+   "fieldtype": "Datetime",
+   "label": "Last Sync Date"
+  },
+  {
+   "fieldname": "column_break_odvk",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_break_pbxx",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "column_break_quon",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "enabled"
+  },
+  {
+   "fieldname": "section_break_oauth",
+   "fieldtype": "Section Break",
+   "label": "OAuth Configuration"
+  },
+  {
+   "fieldname": "section_break_api",
+   "fieldtype": "Section Break",
+   "label": "API Configuration"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2025-09-29 11:10:21.245354",
+ "modified_by": "Administrator",
+ "module": "Zoho Integration",
+ "name": "Zoho Books Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
