@@ -16,7 +16,13 @@
   "section_break_api",
   "organization_id",
   "column_break_quon",
-  "last_sync_date"
+  "last_sync_date",
+  "section_break_sync",
+  "items_per_page",
+  "sync_from_date",
+  "column_break_sync_config",
+  "auto_sync_enabled",
+  "sync_frequency"
  ],
  "fields": [
   {
@@ -88,6 +94,46 @@
    "fieldname": "section_break_api",
    "fieldtype": "Section Break",
    "label": "API Configuration"
+  },
+  {
+   "fieldname": "section_break_sync",
+   "fieldtype": "Section Break",
+   "label": "Sync Configuration"
+  },
+  {
+   "fieldname": "items_per_page",
+   "fieldtype": "Int",
+   "label": "Items Per Page",
+   "description": "Number of items to fetch per API call (max 200)",
+   "default": 50,
+   "min_value": 1,
+   "max_value": 200
+  },
+  {
+   "fieldname": "sync_from_date",
+   "fieldtype": "Date",
+   "label": "Sync From Date",
+   "description": "Only sync items modified after this date (leave empty for all items)"
+  },
+  {
+   "fieldname": "column_break_sync_config",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "auto_sync_enabled",
+   "fieldtype": "Check",
+   "label": "Enable Auto Sync",
+   "description": "Automatically sync items on a schedule",
+   "default": 0
+  },
+  {
+   "fieldname": "sync_frequency",
+   "fieldtype": "Select",
+   "label": "Sync Frequency",
+   "description": "How often to sync items automatically",
+   "options": "Daily\nWeekly\nMonthly",
+   "default": "Daily",
+   "depends_on": "auto_sync_enabled"
   }
  ],
  "grid_page_length": 50,
