@@ -86,17 +86,17 @@ def get_zoho_customers(organization_id=None, page=1, per_page=200, sync_from_dat
 		frappe.throw(_("Access token not available. Please complete OAuth setup first."))
 	
 	# Get the decrypted access token
-    access_token = settings.get_password("access_token")
+	access_token = settings.get_password("access_token")
 	
 	# Use organization_id from settings if not provided
 	if not organization_id:
-    organization_id = settings.organization_id
+		organization_id = settings.organization_id
 	
 	if not organization_id:
 		frappe.throw(_("Organization ID not configured"))
 	
 	url = "https://www.zohoapis.com/books/v3/contacts"
-    headers = {
+	headers = {
 		"Authorization": f"Zoho-oauthtoken {access_token}",
 		"X-com-zoho-books-organizationid": str(organization_id)
 	}
@@ -247,8 +247,18 @@ def sync_customers_from_zoho_to_erpnext(organization_id=None, page=1, per_page=N
 				"zoho_last_synced": frappe.utils.now()
 			}
 			
-			# Check if customer already exists in ERPNext
-			existing_customer = frappe.db.exists("Customer", {"zoho_contact_id": zoho_customer.get("contact_id")})
+			# Check if customer already exists in ERPNext by zoho_contact_id
+			existing_customer_by_zoho_id = None
+			if zoho_customer.get("contact_id"):
+				existing_customer_by_zoho_id = frappe.db.exists("Customer", {"zoho_contact_id": zoho_customer.get("contact_id")})
+			
+			# Also check by customer name to prevent duplicates
+			existing_customer_by_name = None
+			if zoho_customer.get("contact_name"):
+				existing_customer_by_name = frappe.db.exists("Customer", {"customer_name": zoho_customer.get("contact_name")})
+			
+			# Use whichever existing customer we found
+			existing_customer = existing_customer_by_zoho_id or existing_customer_by_name
 			
 			if existing_customer:
 				# Update existing customer
@@ -258,6 +268,15 @@ def sync_customers_from_zoho_to_erpnext(organization_id=None, page=1, per_page=N
 				updated_count += 1
 				frappe.msgprint(f"Updated customer: {zoho_customer.get('contact_name')}")
 			else:
+				# Double-check before creating to prevent race conditions
+				if zoho_customer.get("contact_id") and frappe.db.exists("Customer", {"zoho_contact_id": zoho_customer.get("contact_id")}):
+					frappe.msgprint(f"Customer {zoho_customer.get('contact_name')} already exists, skipping creation")
+					continue
+				
+				if zoho_customer.get("contact_name") and frappe.db.exists("Customer", {"customer_name": zoho_customer.get("contact_name")}):
+					frappe.msgprint(f"Customer {zoho_customer.get('contact_name')} already exists, skipping creation")
+					continue
+				
 				# Create new customer
 				customer_doc = frappe.get_doc(erpnext_customer_data)
 				customer_doc.insert()

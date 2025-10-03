@@ -26,35 +26,35 @@
  ],
  "fields": [
   {
+   "description": "Client ID from Zoho Developer Console",
    "fieldname": "client_id",
    "fieldtype": "Data",
-   "label": "Client ID",
-   "description": "Client ID from Zoho Developer Console"
+   "label": "Client ID"
   },
   {
+   "description": "Client Secret from Zoho Developer Console",
    "fieldname": "client_secret",
    "fieldtype": "Password",
-   "label": "Client Secret",
-   "description": "Client Secret from Zoho Developer Console"
+   "label": "Client Secret"
   },
   {
+   "default": "http://antpos.local:8000/api/method/zoho_integration.auth.callback",
+   "description": "OAuth callback URL (must match Zoho Developer Console)\n/api/method/zoho_integration.auth.callback",
    "fieldname": "redirect_url",
    "fieldtype": "Data",
-   "label": "Redirect URL",
-   "description": "OAuth callback URL (must match Zoho Developer Console)",
-   "default": "http://antpos.local:8000/api/method/zoho_integration.auth.callback"
+   "label": "Redirect URL"
   },
   {
+   "description": "Auto-generated during OAuth setup",
    "fieldname": "refresh_token",
    "fieldtype": "Password",
-   "label": "Refresh Token",
-   "description": "Auto-generated during OAuth setup"
+   "label": "Refresh Token"
   },
   {
+   "description": "Auto-detected from API response",
    "fieldname": "organization_id",
    "fieldtype": "Data",
-   "label": "Organization ID",
-   "description": "Auto-detected from API response"
+   "label": "Organization ID"
   },
   {
    "description": "Auto-generated and refreshed during OAuth setup",
@@ -70,10 +70,6 @@
   {
    "fieldname": "column_break_odvk",
    "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "section_break_pbxx",
-   "fieldtype": "Section Break"
   },
   {
    "fieldname": "column_break_quon",
@@ -101,46 +97,44 @@
    "label": "Sync Configuration"
   },
   {
+   "default": "50",
+   "description": "Number of items to fetch per API call (max 200)",
    "fieldname": "items_per_page",
    "fieldtype": "Int",
-   "label": "Items Per Page",
-   "description": "Number of items to fetch per API call (max 200)",
-   "default": 50,
-   "min_value": 1,
-   "max_value": 200
+   "label": "Items Per Page"
   },
   {
+   "description": "Only sync items modified after this date (leave empty for all items)",
    "fieldname": "sync_from_date",
    "fieldtype": "Date",
-   "label": "Sync From Date",
-   "description": "Only sync items modified after this date (leave empty for all items)"
+   "label": "Sync From Date"
   },
   {
    "fieldname": "column_break_sync_config",
    "fieldtype": "Column Break"
   },
   {
+   "default": "0",
+   "description": "Automatically sync items on a schedule",
    "fieldname": "auto_sync_enabled",
    "fieldtype": "Check",
-   "label": "Enable Auto Sync",
-   "description": "Automatically sync items on a schedule",
-   "default": 0
+   "label": "Enable Auto Sync"
   },
   {
+   "default": "Daily",
+   "depends_on": "auto_sync_enabled",
+   "description": "How often to sync items automatically",
    "fieldname": "sync_frequency",
    "fieldtype": "Select",
    "label": "Sync Frequency",
-   "description": "How often to sync items automatically",
-   "options": "Daily\nWeekly\nMonthly",
-   "default": "Daily",
-   "depends_on": "auto_sync_enabled"
+   "options": "Daily\nWeekly\nMonthly"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-09-29 11:10:21.245354",
+ "modified": "2025-10-03 15:40:22.624630",
  "modified_by": "Administrator",
  "module": "Zoho Integration",
  "name": "Zoho Books Settings",

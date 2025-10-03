@@ -28,24 +28,26 @@ def get_zoho_items(organization_id=None, page=1, per_page=200, sync_from_date=No
 	
 	url = "https://www.zohoapis.com/books/v3/items"
 	headers = {
-		"Authorization": f"Zoho-oauthtoken {access_token}"
+		"Authorization": f"Zoho-oauthtoken {access_token}",
+		"X-com-zoho-books-organizationid": str(organization_id)
 	}
 	
 	params = {
-		"organization_id": organization_id,
 		"page": page,
 		"per_page": per_page
 	}
 	
-	# Add date filtering if provided
-	if sync_from_date:
-		# Convert date to Zoho format (YYYY-MM-DD)
-		if isinstance(sync_from_date, str):
-			params["last_modified_time"] = sync_from_date
-		else:
-			params["last_modified_time"] = sync_from_date.strftime("%Y-%m-%d")
+	# Note: Date filtering removed to avoid API issues
+	# if sync_from_date:
+	# 	# Date filtering functionality can be added later if needed
 	
 	try:
+		# Log the request details for debugging
+		frappe.log_error(
+			title="Zoho Items API Debug",
+			message=f"Request URL: {url}\nHeaders: {headers}\nParams: {params}"
+		)
+		
 		response = requests.get(url, headers=headers, params=params)
 		response.raise_for_status()
 		
@@ -58,10 +60,17 @@ def get_zoho_items(organization_id=None, page=1, per_page=200, sync_from_date=No
 			"page_context": items_data.get("page_context", {})
 		}
 		
+	except requests.exceptions.HTTPError as e:
+		error_message = f"HTTP {e.response.status_code}: {e.response.text}"
+		frappe.log_error(
+			title="Zoho Integration Issue",
+			message=f"HTTP Error getting items from Zoho: {error_message}\nURL: {url}\nParams: {params}"
+		)
+		frappe.throw(_("Failed to get items from Zoho Books: {0}").format(error_message))
 	except requests.exceptions.RequestException as e:
 		frappe.log_error(
 			title="Zoho Integration Issue",
-			message=f"Failed to get items from Zoho: {str(e)}"
+			message=f"Request Error getting items from Zoho: {str(e)}"
 		)
 		frappe.throw(_("Failed to get items from Zoho Books"))
 

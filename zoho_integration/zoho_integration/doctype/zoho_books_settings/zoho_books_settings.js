@@ -3,6 +3,23 @@
 
 frappe.ui.form.on("Zoho Books Settings", {
 	refresh(frm) {
+		if (!frm.doc.access_token) {
+			frm.add_custom_button(__("Setup OAuth"), function() {
+				if (!frm.doc.redirect_url) {
+					frappe.msgprint(__("Please configure the Redirect URL first"));
+					return;
+				}
+				frappe.call({
+					method: "zoho_integration.auth.get_authorization_url",
+					callback: function(r) {
+						if (r.message && r.message.authorization_url) {
+							window.open(r.message.authorization_url, '_blank');
+							frappe.msgprint(__("Please complete the OAuth authorization in the new window"));
+						}
+					}
+				});
+			}, __("OAuth Setup"));
+		}
 		
 		if (frm.doc.access_token) {
 			frm.add_custom_button(__("Test Connection"), function() {
