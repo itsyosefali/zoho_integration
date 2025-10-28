@@ -20,6 +20,7 @@
   "section_break_sync",
   "items_per_page",
   "sync_from_date",
+  "default_warehouse",
   "column_break_sync_config",
   "auto_sync_enabled",
   "sync_frequency"
@@ -108,6 +109,13 @@
    "fieldname": "sync_from_date",
    "fieldtype": "Date",
    "label": "Sync From Date"
+  },
+  {
+   "description": "Default warehouse for syncing stock from Zoho Books",
+   "fieldname": "default_warehouse",
+   "fieldtype": "Link",
+   "label": "Default Warehouse",
+   "options": "Warehouse"
   },
   {
    "fieldname": "column_break_sync_config",

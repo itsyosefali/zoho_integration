@@ -218,7 +218,7 @@ def sync_customers_from_zoho_to_erpnext(organization_id=None, page=1, per_page=N
 				"territory": "All Territories",
 				"disabled": 0 if zoho_customer.get("status") == "active" else 1,
 				"is_internal_customer": 0,
-				"default_currency": "LYD",  # Based on your memory about using LYD
+				"default_currency": zoho_customer.get("currency_code", "AED"),  # Fetch from Zoho, default to AED (UAE Dirham)
 				"default_price_list": "Standard Selling",
 				"zoho_contact_id": zoho_customer.get("contact_id"),
 				"zoho_contact_name": zoho_customer.get("contact_name"),
