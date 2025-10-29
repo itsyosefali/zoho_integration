@@ -3,6 +3,7 @@
 
 import frappe
 import requests
+import json
 from frappe import _
 
 
@@ -309,3 +310,110 @@ def sync_customers_from_zoho_to_erpnext(organization_id=None, page=1, per_page=N
 		"updated_count": updated_count,
 		"error_count": error_count
 	}
+
+
+@frappe.whitelist()
+def push_customer_to_zoho(customer_name):
+	"""
+	Push a customer from ERPNext to Zoho Books
+	"""
+	settings = frappe.get_doc("Zoho Books Settings", "Zoho Books Settings")
+	
+	if not settings.access_token:
+		frappe.throw(_("Access token not available. Please complete OAuth setup first."))
+	
+	# Get the decrypted access token
+	access_token = settings.get_password("access_token")
+	organization_id = settings.organization_id
+	
+	if not organization_id:
+		frappe.throw(_("Organization ID not configured"))
+	
+	# Get customer from ERPNext
+	customer = frappe.get_doc("Customer", customer_name)
+	
+	# Check if customer already exists in Zoho
+	if customer.zoho_contact_id:
+		# Update existing contact
+		url = f"https://www.zohoapis.com/books/v3/contacts/{customer.zoho_contact_id}"
+		method = "PUT"
+		action = "updated"
+	else:
+		# Create new contact
+		url = "https://www.zohoapis.com/books/v3/contacts"
+		method = "POST"
+		action = "created"
+	
+	headers = {
+		"Authorization": f"Zoho-oauthtoken {access_token}",
+		"X-com-zoho-books-organizationid": str(organization_id),
+		"Content-Type": "application/json"
+	}
+	
+	# Prepare contact data
+	contact_data = {
+		"contact_name": customer.customer_name,
+		"contact_type": "customer",
+		"customer_sub_type": "business" if customer.customer_type == "Company" else "individual",
+		"currency_code": customer.default_currency or "AED"
+	}
+	
+	# Add optional fields if available
+	if customer.email_id:
+		contact_data["email"] = customer.email_id
+	if customer.mobile_no:
+		contact_data["mobile"] = customer.mobile_no
+	if customer.primary_address:
+		address = frappe.get_doc("Address", customer.primary_address)
+		if address:
+			billing_address = {
+				"address": address.address_line1 or "",
+				"street2": address.address_line2 or "",
+				"city": address.city or "",
+				"state": address.state or "",
+				"zip": address.pincode or "",
+				"country": address.country or ""
+			}
+			contact_data["billing_address"] = billing_address
+	
+	try:
+		if method == "POST":
+			response = requests.post(url, headers=headers, data=json.dumps(contact_data))
+		else:
+			response = requests.put(url, headers=headers, data=json.dumps(contact_data))
+		
+		response.raise_for_status()
+		
+		contact_response = response.json()
+		zoho_contact = contact_response.get("contact", {})
+		zoho_contact_id = zoho_contact.get("contact_id")
+		
+		# Update customer with Zoho contact ID
+		if zoho_contact_id:
+			customer.zoho_contact_id = zoho_contact_id
+			customer.zoho_contact_name = zoho_contact.get("contact_name")
+			customer.zoho_last_synced = frappe.utils.now()
+			customer.save()
+			
+			frappe.msgprint(_(f"Customer {action} in Zoho Books successfully! Contact ID: {zoho_contact_id}"))
+			return {
+				"status": "success",
+				"message": f"Customer {action} successfully",
+				"zoho_contact_id": zoho_contact_id
+			}
+		else:
+			frappe.throw(_("Failed to get contact ID from Zoho response"))
+	
+	except requests.exceptions.HTTPError as e:
+		error_message = f"HTTP {e.response.status_code}: {e.response.text}"
+		frappe.log_error(
+			title="Zoho Customer Push Failed",
+			message=f"Failed to push customer {customer_name} to Zoho: {error_message}"
+		)
+		frappe.throw(_(f"Failed to push customer to Zoho Books: {error_message}"))
+	except Exception as e:
+		frappe.log_error(
+			title="Zoho Customer Push Failed",
+			message=f"Error pushing customer {customer_name} to Zoho: {str(e)}"
+		)
+		frappe.throw(_(f"Failed to push customer to Zoho Books: {str(e)}"))

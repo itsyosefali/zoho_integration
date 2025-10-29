@@ -3,6 +3,7 @@
 
 import frappe
 import requests
+import json
 from frappe import _
 
 
@@ -328,3 +329,141 @@ def sync_items_from_zoho_to_erpnext(organization_id=None, page=1, per_page=None,
 		"updated_count": updated_count,
 		"error_count": error_count
 	}
+
+
+@frappe.whitelist()
+def push_item_to_zoho(item_code):
+	"""
+	Push an item from ERPNext to Zoho Books
+	"""
+	settings = frappe.get_doc("Zoho Books Settings", "Zoho Books Settings")
+	
+	if not settings.access_token:
+		frappe.throw(_("Access token not available. Please complete OAuth setup first."))
+	
+	# Get the decrypted access token
+	access_token = settings.get_password("access_token")
+	organization_id = settings.organization_id
+	
+	if not organization_id:
+		frappe.throw(_("Organization ID not configured"))
+	
+	# Get item from ERPNext
+	item = frappe.get_doc("Item", item_code)
+	
+	# Check if item already exists in Zoho
+	if item.zoho_item_id:
+		# Update existing item
+		url = f"https://www.zohoapis.com/books/v3/items/{item.zoho_item_id}"
+		method = "PUT"
+		action = "updated"
+	else:
+		# Create new item
+		url = "https://www.zohoapis.com/books/v3/items"
+		method = "POST"
+		action = "created"
+	
+	headers = {
+		"Authorization": f"Zoho-oauthtoken {access_token}",
+		"X-com-zoho-books-organizationid": str(organization_id),
+		"Content-Type": "application/json"
+	}
+	
+	# Prepare item data
+	item_data = {
+		"name": item.item_name,
+		"description": item.description or "",
+		"unit": item.stock_uom or "Nos",
+		"item_type": "inventory" if item.is_stock_item else "service"
+	}
+	
+	# Add SKU if available
+	if item.item_code:
+		item_data["sku"] = item.item_code
+	
+	# Always send selling price (rate) if available
+	if item.standard_rate and item.standard_rate > 0:
+		item_data["rate"] = float(item.standard_rate)
+	else:
+		item_data["rate"] = 0
+	
+	# Always send purchase rate (valuation rate) if available
+	if item.valuation_rate and item.valuation_rate > 0:
+		item_data["purchase_rate"] = float(item.valuation_rate)
+	elif item.last_purchase_rate and item.last_purchase_rate > 0:
+		item_data["purchase_rate"] = float(item.last_purchase_rate)
+	else:
+		item_data["purchase_rate"] = 0
+	
+	# Add stock information if it's a stock item
+	if item.is_stock_item:
+		item_data["track_inventory"] = True
+		
+		# Get default warehouse from item defaults
+		default_warehouse = None
+		if item.item_defaults:
+			for item_default in item.item_defaults:
+				if item_default.default_warehouse:
+					default_warehouse = item_default.default_warehouse
+					break
+		
+		# For NEW items only, send opening stock
+		if method == "POST":
+			# Get opening stock from Stock Ledger Entry or current stock
+			opening_stock = 0
+			opening_stock_rate = item.valuation_rate or item.last_purchase_rate or 0
+			
+			if default_warehouse:
+				# Get current stock quantity from the default warehouse
+				stock_qty = frappe.db.get_value("Bin", 
+					{"item_code": item.item_code, "warehouse": default_warehouse}, 
+					"actual_qty") or 0
+				opening_stock = stock_qty
+			
+			# Send opening stock only if we have stock
+			if opening_stock > 0:
+				item_data["initial_stock"] = float(opening_stock)
+				item_data["initial_stock_rate"] = float(opening_stock_rate)
+	
+	try:
+		if method == "POST":
+			response = requests.post(url, headers=headers, data=json.dumps(item_data))
+		else:
+			response = requests.put(url, headers=headers, data=json.dumps(item_data))
+		
+		response.raise_for_status()
+		
+		item_response = response.json()
+		zoho_item = item_response.get("item", {})
+		zoho_item_id = zoho_item.get("item_id")
+		
+		# Update item with Zoho item ID
+		if zoho_item_id:
+			item.zoho_item_id = zoho_item_id
+			item.zoho_name = zoho_item.get("name")
+			item.zoho_sku = zoho_item.get("sku")
+			item.zoho_last_synced = frappe.utils.now()
+			item.save()
+			
+			frappe.msgprint(_(f"Item {action} in Zoho Books successfully! Item ID: {zoho_item_id}"))
+			return {
+				"status": "success",
+				"message": f"Item {action} successfully",
+				"zoho_item_id": zoho_item_id
+			}
+		else:
+			frappe.throw(_("Failed to get item ID from Zoho response"))
+	
+	except requests.exceptions.HTTPError as e:
+		error_message = f"HTTP {e.response.status_code}: {e.response.text}"
+		frappe.log_error(
+			title="Zoho Item Push Failed",
+			message=f"Failed to push item {item_code} to Zoho: {error_message}"
+		)
+		frappe.throw(_(f"Failed to push item to Zoho Books: {error_message}"))
+	except Exception as e:
+		frappe.log_error(
+			title="Zoho Item Push Failed",
+			message=f"Error pushing item {item_code} to Zoho: {str(e)}"
+		)
+		frappe.throw(_(f"Failed to push item to Zoho Books: {str(e)}"))
