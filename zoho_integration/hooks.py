@@ -45,7 +45,8 @@ app_license = "mit"
 # include js in doctype views
 doctype_js = {
 	"Customer": "public/js/customer.js",
-	"Item": "public/js/item.js"
+	"Item": "public/js/item.js",
+	"Sales Invoice": "public/js/sales_invoice.js"
 }
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
@@ -141,8 +142,16 @@ doctype_js = {
 # Hook on document methods and events
 
 doc_events = {
+	"Customer": {
+		"after_insert": "zoho_integration.customer.push_customer_on_submit",
+		"on_update": "zoho_integration.customer.push_customer_on_submit"
+	},
+	"Item": {
+		"after_insert": "zoho_integration.item.push_item_on_submit",
+		"on_update": "zoho_integration.item.push_item_on_submit"
+	},
 	"Sales Invoice": {
-		"on_update": "zoho_integration.invoice.send_invoice_on_update"
+		"on_submit": "zoho_integration.invoice.send_invoice_on_update"
 	}
 }
 

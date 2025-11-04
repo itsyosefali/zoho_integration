@@ -23,7 +23,12 @@
   "default_warehouse",
   "column_break_sync_config",
   "auto_sync_enabled",
-  "sync_frequency"
+  "sync_frequency",
+  "section_break_auto_push",
+  "auto_sync_customer",
+  "auto_sync_item",
+  "column_break_auto_push",
+  "auto_sync_invoice"
  ],
  "fields": [
   {
@@ -136,6 +141,36 @@
    "fieldtype": "Select",
    "label": "Sync Frequency",
    "options": "Daily\nWeekly\nMonthly"
+  },
+  {
+   "fieldname": "section_break_auto_push",
+   "fieldtype": "Section Break",
+   "label": "Auto Push to Zoho"
+  },
+  {
+   "default": "0",
+   "description": "Automatically push customers to Zoho Books when created/updated",
+   "fieldname": "auto_sync_customer",
+   "fieldtype": "Check",
+   "label": "Auto Push Customer"
+  },
+  {
+   "default": "0",
+   "description": "Automatically push items to Zoho Books when created/updated",
+   "fieldname": "auto_sync_item",
+   "fieldtype": "Check",
+   "label": "Auto Push Item"
+  },
+  {
+   "fieldname": "column_break_auto_push",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "Automatically push sales invoices to Zoho Books when submitted",
+   "fieldname": "auto_sync_invoice",
+   "fieldtype": "Check",
+   "label": "Auto Push Sales Invoice"
   }
  ],
  "grid_page_length": 50,

@@ -417,3 +417,29 @@ def push_customer_to_zoho(customer_name):
 			message=f"Error pushing customer {customer_name} to Zoho: {str(e)}"
 		)
 		frappe.throw(_(f"Failed to push customer to Zoho Books: {str(e)}"))
+
+
+def push_customer_on_submit(doc, method):
+	"""
+	Hook function to automatically push customer to Zoho when submitted/saved
+	"""
+	try:
+		# Check if Zoho integration is enabled
+		settings = frappe.get_doc("Zoho Books Settings", "Zoho Books Settings")
+		if settings.enabled and settings.auto_sync_customer:
+			# Only push if not already synced to Zoho
+			if not doc.zoho_contact_id:
+				result = push_customer_to_zoho(doc.name)
+				
+				if result.get("status") == "success":
+					frappe.msgprint(f"Customer synced to Zoho successfully: {result.get('zoho_contact_id')}", alert=True)
+				else:
+					frappe.log_error(
+						title="Zoho Customer Auto-Sync Failed",
+						message=f"Failed to auto-sync customer {doc.name} to Zoho: {result.get('message')}"
+					)
+	except Exception as e:
+		frappe.log_error(
+			title="Zoho Integration Hook Error",
+			message=f"Error in push_customer_on_submit hook: {str(e)}"
+		)

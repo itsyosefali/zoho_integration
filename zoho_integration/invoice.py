@@ -306,23 +306,23 @@ def create_zoho_invoice(invoice_doc, customer_id):
 
 def send_invoice_on_update(doc, method):
 	"""
-	Hook function to automatically send invoice to Zoho when created or updated
+	Hook function to automatically send invoice to Zoho when submitted
 	"""
 	try:
-		# Only send if not already sent to Zoho and invoice is submitted
-		if not doc.zoho_invoice_id :
-			# Check if Zoho integration is enabled
-			settings = frappe.get_doc("Zoho Books Settings", "Zoho Books Settings")
-			if settings.enabled:
+		# Check if Zoho integration is enabled
+		settings = frappe.get_doc("Zoho Books Settings", "Zoho Books Settings")
+		if settings.enabled and settings.auto_sync_invoice:
+			# Only send if not already sent to Zoho and invoice is submitted
+			if not doc.zoho_invoice_id and doc.docstatus == 1:
 				# Set initial sync status
 				doc.db_set("zoho_sync_status", "Not Synced")
 				
 				result = send_invoice_to_zoho(doc.name)
 				
 				if result.get("status") == "success":
-					frappe.msgprint(f"Invoice sent to Zoho successfully: {result.get('message')}")
+					frappe.msgprint(f"Invoice sent to Zoho successfully: {result.get('message')}", alert=True)
 				else:
-					frappe.msgprint(f"Failed to send invoice to Zoho: {result.get('message')}", alert=True)
+					frappe.msgprint(f"Failed to send invoice to Zoho: {result.get('message')}", alert=True, indicator='red')
 					
 	except Exception as e:
 		frappe.log_error(

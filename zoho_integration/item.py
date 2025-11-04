@@ -467,3 +467,29 @@ def push_item_to_zoho(item_code):
 			message=f"Error pushing item {item_code} to Zoho: {str(e)}"
 		)
 		frappe.throw(_(f"Failed to push item to Zoho Books: {str(e)}"))
+
+
+def push_item_on_submit(doc, method):
+	"""
+	Hook function to automatically push item to Zoho when submitted/saved
+	"""
+	try:
+		# Check if Zoho integration is enabled
+		settings = frappe.get_doc("Zoho Books Settings", "Zoho Books Settings")
+		if settings.enabled and settings.auto_sync_item:
+			# Only push if not already synced to Zoho
+			if not doc.zoho_item_id:
+				result = push_item_to_zoho(doc.item_code)
+				
+				if result.get("status") == "success":
+					frappe.msgprint(f"Item synced to Zoho successfully: {result.get('zoho_item_id')}", alert=True)
+				else:
+					frappe.log_error(
+						title="Zoho Item Auto-Sync Failed",
+						message=f"Failed to auto-sync item {doc.item_code} to Zoho: {result.get('message')}"
+					)
+	except Exception as e:
+		frappe.log_error(
+			title="Zoho Integration Hook Error",
+			message=f"Error in push_item_on_submit hook: {str(e)}"
+		)
