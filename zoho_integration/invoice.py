@@ -209,6 +209,56 @@ def send_invoice_to_zoho(invoice_id):
 		return {"status": "error", "message": str(e)}
 
 
+def submit_zoho_invoice_for_approval(invoice_id, organization_id, access_token):
+	"""
+	Submit invoice for approval in Zoho Books
+	"""
+	url = f"https://www.zohoapis.com/books/v3/invoices/{invoice_id}/submit"
+	headers = {
+		"Authorization": f"Zoho-oauthtoken {access_token}",
+		"X-com-zoho-books-organizationid": str(organization_id),
+		"Content-Type": "application/json"
+	}
+	
+	params = {
+		"organization_id": str(organization_id)
+	}
+	
+	try:
+		response = requests.post(url, headers=headers, params=params)
+		
+		if response.status_code == 200:
+			submit_response = response.json()
+			if submit_response.get("code") == 0:
+				frappe.log_error(
+					title="Zoho Invoice Submitted",
+					message=f"Invoice submitted for approval successfully: {invoice_id}"
+				)
+				return {"status": "success", "message": "Invoice submitted for approval"}
+			else:
+				error_msg = f"Failed to submit invoice: {submit_response.get('message', 'Unknown error')}"
+				frappe.log_error(
+					title="Zoho Integration Issue",
+					message=error_msg
+				)
+				return {"status": "error", "message": error_msg}
+		else:
+			error_msg = f"Failed to submit invoice: {response.status_code} - {response.text}"
+			frappe.log_error(
+				title="Zoho Integration Issue",
+				message=error_msg
+			)
+			return {"status": "error", "message": error_msg}
+			
+	except Exception as e:
+		error_msg = f"Error submitting invoice: {str(e)}"
+		frappe.log_error(
+			title="Zoho Integration Issue",
+			message=error_msg
+		)
+		return {"status": "error", "message": error_msg}
+
+
 def create_zoho_invoice(invoice_doc, customer_id):
 	"""
 	Create invoice in Zoho Books/Invoice
@@ -281,6 +331,20 @@ def create_zoho_invoice(invoice_doc, customer_id):
 				title="Zoho Invoice Created",
 				message=f"Invoice created successfully: {invoice_doc.name} -> Zoho #{zoho_invoice_number} (ID: {zoho_invoice_id})"
 			)
+			
+			# Submit invoice for approval
+			submit_result = submit_zoho_invoice_for_approval(zoho_invoice_id, organization_id, access_token)
+			if submit_result.get("status") == "success":
+				frappe.log_error(
+					title="Zoho Invoice Submitted",
+					message=f"Invoice submitted for approval: {invoice_doc.name} -> Zoho #{zoho_invoice_number}"
+				)
+			else:
+				# Log warning but don't fail the whole operation
+				frappe.log_error(
+					title="Zoho Invoice Submission Warning",
+					message=f"Invoice created but submission failed: {submit_result.get('message')}"
+				)
 			
 			return {
 				"status": "success",
