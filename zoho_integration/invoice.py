@@ -157,11 +157,20 @@ def send_invoice_to_zoho(invoice_id):
 		# Get customer details
 		customer_doc = frappe.get_doc("Customer", invoice_doc.customer)
 		
-		# Find or create Zoho contact
-		zoho_contact_id = find_zoho_contact_id(
-			customer_doc.customer_name, 
-			customer_doc.email_id
-		)
+		# Check if customer already has a Zoho contact ID
+		zoho_contact_id = getattr(customer_doc, 'zoho_contact_id', None)
+		
+		if not zoho_contact_id:
+			# Try to find existing contact in Zoho
+			zoho_contact_id = find_zoho_contact_id(
+				customer_doc.customer_name, 
+				customer_doc.email_id
+			)
+			
+			if zoho_contact_id:
+				# Update customer with found Zoho contact ID
+				customer_doc.db_set("zoho_contact_id", zoho_contact_id)
+				frappe.db.commit()
 		
 		if not zoho_contact_id:
 			# Create new contact in Zoho
@@ -172,6 +181,11 @@ def send_invoice_to_zoho(invoice_id):
 				mobile=customer_doc.mobile_no,
 				company_name=customer_doc.customer_name if customer_doc.customer_type == "Company" else None
 			)
+			
+			if zoho_contact_id:
+				# Update customer with new Zoho contact ID
+				customer_doc.db_set("zoho_contact_id", zoho_contact_id)
+				frappe.db.commit()
 		
 		if not zoho_contact_id:
 			frappe.log_error(
