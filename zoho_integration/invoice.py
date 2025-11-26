@@ -365,30 +365,21 @@ def create_zoho_payment(invoice_doc, zoho_invoice_id, customer_id, organization_
 			payment_response = response.json()
 			zoho_payment_id = payment_response.get("customerpayment", {}).get("payment_id")
 			
-			frappe.log_error(
-				title="Zoho Payment Created",
-				message=f"Payment created successfully for invoice: {invoice_doc.name} -> Zoho Payment ID: {zoho_payment_id}"
-			)
-			
 			return {
 				"status": "success",
 				"message": "Payment created successfully",
 				"payment_id": zoho_payment_id
 			}
 		else:
-			error_msg = f"Failed to create payment: {response.status_code} - {response.text}"
-			frappe.log_error(
-				title="Zoho Integration Issue",
-				message=error_msg
-			)
+			error_response = response.json() if response.text else {}
+			error_code = error_response.get("code", "Unknown")
+			error_message = error_response.get("message", response.text)
+			error_msg = f"Failed to create payment: {response.status_code} - Code: {error_code}, Message: {error_message}"
+			
 			return {"status": "error", "message": error_msg}
 			
 	except Exception as e:
 		error_msg = f"Error creating payment: {str(e)}"
-		frappe.log_error(
-			title="Zoho Integration Issue",
-			message=error_msg
-		)
 		return {"status": "error", "message": error_msg}
 
 
@@ -465,44 +456,30 @@ def create_zoho_invoice(invoice_doc, customer_id):
 				message=f"Invoice created successfully: {invoice_doc.name} -> Zoho #{zoho_invoice_number} (ID: {zoho_invoice_id})"
 			)
 			
-			# Submit invoice for approval
-			submit_result = submit_zoho_invoice_for_approval(zoho_invoice_id, organization_id, access_token)
-			if submit_result.get("status") == "success":
+			# Create payment for the invoice if payment amount exists
+			payment_result = create_zoho_payment(
+				invoice_doc, 
+				zoho_invoice_id, 
+				customer_id, 
+				organization_id, 
+				access_token
+			)
+			
+			# Log payment creation result
+			if payment_result.get("status") == "success":
 				frappe.log_error(
-					title="Zoho Invoice Submitted",
-					message=f"Invoice submitted for approval: {invoice_doc.name} -> Zoho #{zoho_invoice_number}"
+					title="Zoho Payment Created Successfully",
+					message=f"Payment created successfully for invoice: {invoice_doc.name} -> Zoho Payment ID: {payment_result.get('payment_id')}, Amount: {invoice_doc.paid_amount}"
 				)
-				
-				# Create payment for the invoice if payment amount exists
-				payment_result = create_zoho_payment(
-					invoice_doc, 
-					zoho_invoice_id, 
-					customer_id, 
-					organization_id, 
-					access_token
+			elif payment_result.get("status") == "skipped":
+				frappe.log_error(
+					title="Zoho Payment Skipped",
+					message=f"Payment skipped for invoice: {invoice_doc.name} - {payment_result.get('message')}"
 				)
-				if payment_result.get("status") == "success":
-					frappe.log_error(
-						title="Zoho Payment Created",
-						message=f"Payment created for invoice: {invoice_doc.name} -> Zoho Payment ID: {payment_result.get('payment_id')}"
-					)
-				elif payment_result.get("status") == "skipped":
-					# Payment skipped is not an error, just log it
-					frappe.log_error(
-						title="Zoho Payment Skipped",
-						message=f"Payment skipped for invoice: {invoice_doc.name} - {payment_result.get('message')}"
-					)
-				else:
-					# Log warning but don't fail the whole operation
-					frappe.log_error(
-						title="Zoho Payment Creation Warning",
-						message=f"Invoice submitted but payment creation failed: {payment_result.get('message')}"
-					)
 			else:
-				# Log warning but don't fail the whole operation
 				frappe.log_error(
-					title="Zoho Invoice Submission Warning",
-					message=f"Invoice created but submission failed: {submit_result.get('message')}"
+					title="Zoho Payment Creation Failed",
+					message=f"Payment creation failed for invoice: {invoice_doc.name} - {payment_result.get('message')}"
 				)
 			
 			return {
