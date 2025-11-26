@@ -87,7 +87,7 @@ def create_zoho_contact(customer_name, email=None, phone=None, mobile=None, comp
 @frappe.whitelist()
 def find_zoho_contact_id(customer_name, email=None):
 	"""
-	Find existing contact ID in Zoho Books
+	Find existing contact ID in Zoho Books - only returns customer-type contacts
 	"""
 	settings = frappe.get_doc("Zoho Books Settings", "Zoho Books Settings")
 	
@@ -108,7 +108,8 @@ def find_zoho_contact_id(customer_name, email=None):
 	
 	params = {
 		"per_page": 200,
-		"search_text": customer_name
+		"search_text": customer_name,
+		"contact_type": "customer"  # Only fetch customer-type contacts
 	}
 	
 	try:
@@ -118,8 +119,12 @@ def find_zoho_contact_id(customer_name, email=None):
 			contacts_data = response.json()
 			contacts = contacts_data.get("contacts", [])
 			
-			# Search for exact match by name or email
+			# Search for exact match by name or email, ensuring it's a customer
 			for contact in contacts:
+				# Double-check that contact_type is customer
+				if contact.get("contact_type") != "customer":
+					continue
+					
 				if (contact.get("contact_name") == customer_name or 
 					(email and contact.get("email") == email)):
 					return contact.get("contact_id")

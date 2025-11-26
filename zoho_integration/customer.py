@@ -35,7 +35,8 @@ def get_zoho_customers_simple(organization_id=None, page=1, per_page=200):
 	
 	params = {
 		"page": page,
-		"per_page": per_page
+		"per_page": per_page,
+		"contact_type": "customer"  # Only fetch customer-type contacts
 	}
 	
 	try:
@@ -44,7 +45,10 @@ def get_zoho_customers_simple(organization_id=None, page=1, per_page=200):
 		response.raise_for_status()
 		
 		customers_data = response.json()
-		all_customers = customers_data.get("contacts", [])
+		all_contacts = customers_data.get("contacts", [])
+		
+		# Filter to only include customer-type contacts
+		all_customers = [contact for contact in all_contacts if contact.get("contact_type") == "customer"]
 		
 		return {
 			"status": "success",
@@ -104,7 +108,8 @@ def get_zoho_customers(organization_id=None, page=1, per_page=200, sync_from_dat
 	
 	params = {
 		"page": page,
-		"per_page": per_page
+		"per_page": per_page,
+		"contact_type": "customer"  # Only fetch customer-type contacts
 	}
 	
 	try:
@@ -125,7 +130,10 @@ def get_zoho_customers(organization_id=None, page=1, per_page=200, sync_from_dat
 		response.raise_for_status()
 		
 		customers_data = response.json()
-		all_customers = customers_data.get("contacts", [])
+		all_contacts = customers_data.get("contacts", [])
+		
+		# Filter to only include customer-type contacts
+		all_customers = [contact for contact in all_contacts if contact.get("contact_type") == "customer"]
 		
 		# Filter out customers that already exist in ERPNext if only_new is True
 		if only_new:
