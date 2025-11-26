@@ -278,6 +278,43 @@ def submit_zoho_invoice_for_approval(invoice_id, organization_id, access_token):
 		return {"status": "error", "message": error_msg}
 
 
+def get_zoho_invoice_balance(invoice_id, organization_id, access_token):
+	"""
+	Get invoice balance from Zoho Books
+	"""
+	url = f"https://www.zohoapis.com/books/v3/invoices/{invoice_id}"
+	headers = {
+		"Authorization": f"Zoho-oauthtoken {access_token}",
+		"X-com-zoho-books-organizationid": str(organization_id)
+	}
+	
+	params = {
+		"organization_id": str(organization_id)
+	}
+	
+	try:
+		response = requests.get(url, headers=headers, params=params)
+		
+		if response.status_code == 200:
+			invoice_response = response.json()
+			invoice_data = invoice_response.get("invoice", {})
+			balance = float(invoice_data.get("balance", 0))
+			return balance
+		else:
+			frappe.log_error(
+				title="Zoho Invoice Balance Fetch Failed",
+				message=f"Failed to get invoice balance: {response.status_code} - {response.text}"
+			)
+			return None
+			
+	except Exception as e:
+		frappe.log_error(
+			title="Zoho Invoice Balance Fetch Error",
+			message=f"Error getting invoice balance: {str(e)}"
+		)
+		return None
+
+
 def create_zoho_payment(invoice_doc, zoho_invoice_id, customer_id, organization_id, access_token):
 	"""
 	Create a payment in Zoho Books for the invoice
@@ -289,6 +326,33 @@ def create_zoho_payment(invoice_doc, zoho_invoice_id, customer_id, organization_
 			message=f"No payment amount found for invoice: {invoice_doc.name}"
 		)
 		return {"status": "skipped", "message": "No payment amount found"}
+	
+	# Get invoice balance from Zoho to ensure we don't exceed it
+	zoho_balance = get_zoho_invoice_balance(zoho_invoice_id, organization_id, access_token)
+	
+	# Use the minimum of paid_amount and invoice balance
+	if zoho_balance is not None:
+		payment_amount = min(float(invoice_doc.paid_amount), float(zoho_balance))
+		if payment_amount <= 0:
+			frappe.log_error(
+				title="Zoho Payment Skipped",
+				message=f"Invoice balance is zero or negative for invoice: {invoice_doc.name}, Balance: {zoho_balance}"
+			)
+			return {"status": "skipped", "message": f"Invoice balance is {zoho_balance}, cannot create payment"}
+		
+		# Log if payment amount was adjusted due to balance constraint
+		if payment_amount < float(invoice_doc.paid_amount):
+			frappe.log_error(
+				title="Zoho Payment Amount Adjusted",
+				message=f"Payment amount adjusted from {invoice_doc.paid_amount} to {payment_amount} due to invoice balance ({zoho_balance}) for invoice: {invoice_doc.name}"
+			)
+	else:
+		# If we can't get balance, use paid_amount but log a warning
+		payment_amount = float(invoice_doc.paid_amount)
+		frappe.log_error(
+			title="Zoho Payment Warning",
+			message=f"Could not fetch invoice balance from Zoho, using paid_amount: {payment_amount} for invoice: {invoice_doc.name}"
+		)
 	
 	# Get payment mode from invoice payments table or default to cash
 	payment_mode = "cash"  # Default payment mode
@@ -338,12 +402,12 @@ def create_zoho_payment(invoice_doc, zoho_invoice_id, customer_id, organization_
 	payment_data = {
 		"customer_id": customer_id,
 		"payment_mode": payment_mode,
-		"amount": float(invoice_doc.paid_amount),
+		"amount": payment_amount,
 		"date": invoice_doc.posting_date.strftime("%Y-%m-%d"),
 		"invoices": [
 			{
 				"invoice_id": str(zoho_invoice_id),
-				"amount_applied": float(invoice_doc.paid_amount)
+				"amount_applied": payment_amount
 			}
 		]
 	}
