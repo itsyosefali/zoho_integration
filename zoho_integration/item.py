@@ -214,8 +214,8 @@ def sync_items_from_zoho_to_erpnext(organization_id=None, page=1, per_page=None,
 				
 				# Add Item Defaults with warehouse (Stores - E for ETMS company)
 				item_doc.append("item_defaults", {
-					"company": "ETMS",
-					"default_warehouse": "Stores - E"
+					"company": "Big Man Collections",
+					"default_warehouse": "Stores - BMC"
 				})
 				
 				item_doc.insert()
