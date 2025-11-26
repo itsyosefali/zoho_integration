@@ -264,6 +264,120 @@ def submit_zoho_invoice_for_approval(invoice_id, organization_id, access_token):
 		return {"status": "error", "message": error_msg}
 
 
+def create_zoho_payment(invoice_doc, zoho_invoice_id, customer_id, organization_id, access_token):
+	"""
+	Create a payment in Zoho Books for the invoice
+	"""
+	# Check if invoice has payment information
+	if not invoice_doc.paid_amount or invoice_doc.paid_amount <= 0:
+		frappe.log_error(
+			title="Zoho Payment Skipped",
+			message=f"No payment amount found for invoice: {invoice_doc.name}"
+		)
+		return {"status": "skipped", "message": "No payment amount found"}
+	
+	# Get payment mode from invoice payments table or default to cash
+	payment_mode = "cash"  # Default payment mode
+	account_id = None
+	
+	if invoice_doc.payments and len(invoice_doc.payments) > 0:
+		# Get the first payment entry
+		payment_entry = invoice_doc.payments[0]
+		if payment_entry.mode_of_payment:
+			# Map ERPNext payment modes to Zoho payment modes
+			mode_name = payment_entry.mode_of_payment.lower()
+			if "cash" in mode_name:
+				payment_mode = "cash"
+			elif "credit" in mode_name or "card" in mode_name:
+				payment_mode = "creditcard"
+			elif "bank" in mode_name or "transfer" in mode_name:
+				payment_mode = "banktransfer"
+			elif "cheque" in mode_name or "check" in mode_name:
+				payment_mode = "bankremittance"
+			elif "auto" in mode_name:
+				payment_mode = "autotransaction"
+			else:
+				# Default mapping for common names
+				mode_mapping = {
+					"cash": "cash",
+					"bank": "banktransfer",
+					"credit card": "creditcard",
+					"cheque": "bankremittance",
+					"bank transfer": "banktransfer",
+					"bank remittance": "bankremittance",
+					"auto transaction": "autotransaction"
+				}
+				payment_mode = mode_mapping.get(mode_name, "cash")
+	
+	url = "https://www.zohoapis.com/books/v3/customerpayments"
+	headers = {
+		"Authorization": f"Zoho-oauthtoken {access_token}",
+		"X-com-zoho-books-organizationid": str(organization_id),
+		"Content-Type": "application/json"
+	}
+	
+	params = {
+		"organization_id": str(organization_id)
+	}
+	
+	# Prepare payment data
+	payment_data = {
+		"customer_id": customer_id,
+		"payment_mode": payment_mode,
+		"amount": float(invoice_doc.paid_amount),
+		"date": invoice_doc.posting_date.strftime("%Y-%m-%d"),
+		"invoices": [
+			{
+				"invoice_id": str(zoho_invoice_id),
+				"amount_applied": float(invoice_doc.paid_amount)
+			}
+		]
+	}
+	
+	# Add account_id if available
+	if account_id:
+		payment_data["account_id"] = account_id
+	
+	# Add reference number if available
+	if invoice_doc.payments and len(invoice_doc.payments) > 0:
+		payment_entry = invoice_doc.payments[0]
+		if payment_entry.reference_no:
+			payment_data["reference_number"] = payment_entry.reference_no
+	
+	try:
+		response = requests.post(url, headers=headers, params=params, data=json.dumps(payment_data))
+		
+		if response.status_code == 201:
+			payment_response = response.json()
+			zoho_payment_id = payment_response.get("customerpayment", {}).get("payment_id")
+			
+			frappe.log_error(
+				title="Zoho Payment Created",
+				message=f"Payment created successfully for invoice: {invoice_doc.name} -> Zoho Payment ID: {zoho_payment_id}"
+			)
+			
+			return {
+				"status": "success",
+				"message": "Payment created successfully",
+				"payment_id": zoho_payment_id
+			}
+		else:
+			error_msg = f"Failed to create payment: {response.status_code} - {response.text}"
+			frappe.log_error(
+				title="Zoho Integration Issue",
+				message=error_msg
+			)
+			return {"status": "error", "message": error_msg}
+			
+	except Exception as e:
+		error_msg = f"Error creating payment: {str(e)}"
+		frappe.log_error(
+			title="Zoho Integration Issue",
+			message=error_msg
+		)
+		return {"status": "error", "message": error_msg}
+
+
 def create_zoho_invoice(invoice_doc, customer_id):
 	"""
 	Create invoice in Zoho Books/Invoice
@@ -344,6 +458,32 @@ def create_zoho_invoice(invoice_doc, customer_id):
 					title="Zoho Invoice Submitted",
 					message=f"Invoice submitted for approval: {invoice_doc.name} -> Zoho #{zoho_invoice_number}"
 				)
+				
+				# Create payment for the invoice if payment amount exists
+				payment_result = create_zoho_payment(
+					invoice_doc, 
+					zoho_invoice_id, 
+					customer_id, 
+					organization_id, 
+					access_token
+				)
+				if payment_result.get("status") == "success":
+					frappe.log_error(
+						title="Zoho Payment Created",
+						message=f"Payment created for invoice: {invoice_doc.name} -> Zoho Payment ID: {payment_result.get('payment_id')}"
+					)
+				elif payment_result.get("status") == "skipped":
+					# Payment skipped is not an error, just log it
+					frappe.log_error(
+						title="Zoho Payment Skipped",
+						message=f"Payment skipped for invoice: {invoice_doc.name} - {payment_result.get('message')}"
+					)
+				else:
+					# Log warning but don't fail the whole operation
+					frappe.log_error(
+						title="Zoho Payment Creation Warning",
+						message=f"Invoice submitted but payment creation failed: {payment_result.get('message')}"
+					)
 			else:
 				# Log warning but don't fail the whole operation
 				frappe.log_error(
