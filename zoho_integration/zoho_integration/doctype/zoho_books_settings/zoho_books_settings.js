@@ -51,7 +51,7 @@ frappe.ui.form.on("Zoho Books Settings", {
                             method: "zoho_integration.customer.sync_customers_from_zoho_to_erpnext",
                             args: {
                                 organization_id: frm.doc.organization_id,
-                                per_page: 50,
+                                per_page: frm.doc.customers_per_page || 50,
                                 only_new: true
                             },
                             callback: function(r) {

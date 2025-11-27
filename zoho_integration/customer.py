@@ -47,8 +47,13 @@ def get_zoho_customers_simple(organization_id=None, page=1, per_page=200):
 		customers_data = response.json()
 		all_contacts = customers_data.get("contacts", [])
 		
-		# Filter to only include customer-type contacts
-		all_customers = [contact for contact in all_contacts if contact.get("contact_type") == "customer"]
+		# API already filters by contact_type="customer", but double-check to ensure only customers are returned
+		# Use contact_id as the reference document from Zoho
+		all_customers = []
+		for contact in all_contacts:
+			# Ensure contact_type is customer and has a valid contact_id (reference document)
+			if contact.get("contact_type") == "customer" and contact.get("contact_id"):
+				all_customers.append(contact)
 		
 		return {
 			"status": "success",
@@ -132,14 +137,20 @@ def get_zoho_customers(organization_id=None, page=1, per_page=200, sync_from_dat
 		customers_data = response.json()
 		all_contacts = customers_data.get("contacts", [])
 		
-		# Filter to only include customer-type contacts
-		all_customers = [contact for contact in all_contacts if contact.get("contact_type") == "customer"]
+		# API already filters by contact_type="customer", but double-check to ensure only customers are returned
+		# Use contact_id as the reference document from Zoho
+		all_customers = []
+		for contact in all_contacts:
+			# Ensure contact_type is customer and has a valid contact_id (reference document)
+			if contact.get("contact_type") == "customer" and contact.get("contact_id"):
+				all_customers.append(contact)
 		
 		# Filter out customers that already exist in ERPNext if only_new is True
+		# Use zoho_contact_id (reference document) to check for existing customers
 		if only_new:
 			new_customers = []
 			for customer in all_customers:
-				zoho_contact_id = customer.get("contact_id")
+				zoho_contact_id = customer.get("contact_id")  # Reference document from Zoho
 				if zoho_contact_id and not frappe.db.exists("Customer", {"zoho_contact_id": zoho_contact_id}):
 					new_customers.append(customer)
 			all_customers = new_customers
@@ -203,14 +214,46 @@ def sync_customers_from_zoho_to_erpnext(organization_id=None, page=1, per_page=N
 	zoho_customers_response = get_zoho_customers_simple(organization_id, page, per_page)
 	zoho_customers = zoho_customers_response.get("customers", [])
 	
+	# Log how many customers were fetched from Zoho
+	total_fetched = len(zoho_customers)
+	frappe.log_error(
+		title="Zoho Customer Sync Debug",
+		message=f"Fetched {total_fetched} customers from Zoho (contact_type=customer)"
+	)
+	
 	# Filter out customers that already exist in ERPNext if only_new is True
+	# Use zoho_contact_id (reference document) to check for existing customers
+	existing_count = 0
 	if only_new:
 		new_customers = []
 		for customer in zoho_customers:
-			zoho_contact_id = customer.get("contact_id")
-			if zoho_contact_id and not frappe.db.exists("Customer", {"zoho_contact_id": zoho_contact_id}):
-				new_customers.append(customer)
+			zoho_contact_id = customer.get("contact_id")  # Reference document from Zoho
+			if zoho_contact_id:
+				if frappe.db.exists("Customer", {"zoho_contact_id": zoho_contact_id}):
+					existing_count += 1
+				else:
+					new_customers.append(customer)
+			else:
+				# Log customers without contact_id
+				frappe.log_error(
+					title="Zoho Customer Sync Warning",
+					message=f"Customer {customer.get('contact_name')} has no contact_id (reference document), skipping"
+				)
 		zoho_customers = new_customers
+		frappe.log_error(
+			title="Zoho Customer Sync Debug",
+			message=f"After filtering: {len(zoho_customers)} new customers, {existing_count} already exist"
+		)
+	else:
+		# When only_new=False, count existing customers for reporting
+		for customer in zoho_customers:
+			zoho_contact_id = customer.get("contact_id")  # Reference document from Zoho
+			if zoho_contact_id and frappe.db.exists("Customer", {"zoho_contact_id": zoho_contact_id}):
+				existing_count += 1
+		frappe.log_error(
+			title="Zoho Customer Sync Debug",
+			message=f"Processing all customers: {len(zoho_customers)} total, {existing_count} already exist (will be updated)"
+		)
 	
 	synced_count = 0
 	updated_count = 0
@@ -229,7 +272,7 @@ def sync_customers_from_zoho_to_erpnext(organization_id=None, page=1, per_page=N
 				"is_internal_customer": 0,
 				"default_currency": zoho_customer.get("currency_code", "AED"),  # Fetch from Zoho, default to AED (UAE Dirham)
 				"default_price_list": "Standard Selling",
-				"zoho_contact_id": zoho_customer.get("contact_id"),
+				"zoho_contact_id": zoho_customer.get("contact_id"),  # Reference document from Zoho
 				"zoho_contact_name": zoho_customer.get("contact_name"),
 				"zoho_contact_type": zoho_customer.get("contact_type"),
 				"zoho_company_name": zoho_customer.get("company_name", ""),
@@ -256,10 +299,11 @@ def sync_customers_from_zoho_to_erpnext(organization_id=None, page=1, per_page=N
 				"zoho_last_synced": frappe.utils.now()
 			}
 			
-			# Check if customer already exists in ERPNext by zoho_contact_id
+			# Check if customer already exists in ERPNext by zoho_contact_id (reference document from Zoho)
 			existing_customer_by_zoho_id = None
-			if zoho_customer.get("contact_id"):
-				existing_customer_by_zoho_id = frappe.db.exists("Customer", {"zoho_contact_id": zoho_customer.get("contact_id")})
+			zoho_contact_id = zoho_customer.get("contact_id")  # Reference document from Zoho
+			if zoho_contact_id:
+				existing_customer_by_zoho_id = frappe.db.exists("Customer", {"zoho_contact_id": zoho_contact_id})
 			
 			# Also check by customer name to prevent duplicates
 			existing_customer_by_name = None
@@ -278,7 +322,9 @@ def sync_customers_from_zoho_to_erpnext(organization_id=None, page=1, per_page=N
 				frappe.msgprint(f"Updated customer: {zoho_customer.get('contact_name')}")
 			else:
 				# Double-check before creating to prevent race conditions
-				if zoho_customer.get("contact_id") and frappe.db.exists("Customer", {"zoho_contact_id": zoho_customer.get("contact_id")}):
+				# Use zoho_contact_id (reference document) to verify customer doesn't exist
+				zoho_contact_id = zoho_customer.get("contact_id")  # Reference document from Zoho
+				if zoho_contact_id and frappe.db.exists("Customer", {"zoho_contact_id": zoho_contact_id}):
 					frappe.msgprint(f"Customer {zoho_customer.get('contact_name')} already exists, skipping creation")
 					continue
 				
@@ -316,7 +362,10 @@ def sync_customers_from_zoho_to_erpnext(organization_id=None, page=1, per_page=N
 		"message": f"Customers sync completed. Created: {synced_count}, Updated: {updated_count}, Errors: {error_count}",
 		"synced_count": synced_count,
 		"updated_count": updated_count,
-		"error_count": error_count
+		"error_count": error_count,
+		"total_fetched_from_zoho": total_fetched,
+		"existing_customers_skipped": existing_count if only_new else 0,
+		"customers_processed": len(zoho_customers) if not only_new else (total_fetched - existing_count)
 	}
 
 

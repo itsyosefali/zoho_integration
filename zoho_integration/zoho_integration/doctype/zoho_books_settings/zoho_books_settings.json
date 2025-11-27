@@ -19,6 +19,7 @@
   "last_sync_date",
   "section_break_sync",
   "items_per_page",
+  "customers_per_page",
   "sync_from_date",
   "default_warehouse",
   "column_break_sync_config",
@@ -108,6 +109,13 @@
    "fieldname": "items_per_page",
    "fieldtype": "Int",
    "label": "Items Per Page"
+  },
+  {
+   "default": "50",
+   "description": "Number of customers to fetch per API call (max 200)",
+   "fieldname": "customers_per_page",
+   "fieldtype": "Int",
+   "label": "Customers Per Page"
   },
   {
    "description": "Only sync items modified after this date (leave empty for all items)",
