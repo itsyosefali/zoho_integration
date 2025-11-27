@@ -4,20 +4,43 @@
 import frappe
 import requests
 from frappe import _
-@frappe.whitelist()
-def refresh_access_token():
+
+def get_valid_access_token():
 	"""
-	Refresh the access token using refresh token
+	Get a valid access token, automatically refreshing if needed.
+	Returns the access token string or None if refresh fails.
 	"""
-	settings = frappe.get_doc(
-		"Zoho Books Settings", "Zoho Books Settings",
-	)
+	settings = frappe.get_doc("Zoho Books Settings", "Zoho Books Settings")
+	
+	if not settings.access_token:
+		return None
+	
+	# Try to refresh the token automatically
+	refresh_result = refresh_access_token_internal()
+	if refresh_result.get("status") == "success":
+		return refresh_result.get("access_token")
+	
+	# If refresh failed, try using existing token
+	# It might still be valid
+	return settings.get_password("access_token")
+
+def refresh_access_token_internal():
+	"""
+	Internal function to refresh access token (without @frappe.whitelist)
+	"""
+	settings = frappe.get_doc("Zoho Books Settings", "Zoho Books Settings")
 	
 	if not settings.refresh_token:
-		frappe.throw(_("Refresh token not available"))
+		return {
+			"status": "error",
+			"message": "Refresh token not available"
+		}
 	
 	if not settings.client_id or not settings.client_secret:
-		frappe.throw(_("Client ID and Client Secret are not configured"))
+		return {
+			"status": "error",
+			"message": "Client ID and Client Secret are not configured"
+		}
 	
 	client_secret = settings.get_password("client_secret")
 	refresh_token = settings.get_password("refresh_token")
@@ -33,7 +56,6 @@ def refresh_access_token():
 	
 	try:
 		response = requests.post(url, data=data)
-		
 		response.raise_for_status()
 		token_data = response.json()
 		
@@ -48,7 +70,6 @@ def refresh_access_token():
 				"access_token": token_data.get("access_token")
 			}
 		else:
-			
 			return {
 				"status": "error",
 				"message": f"Token refresh failed: {token_data.get('error', 'Unknown error')}"
@@ -74,28 +95,111 @@ def refresh_access_token():
 			"message": f"Token refresh failed: {str(e)}"
 		}
 
-
-@frappe.whitelist()
-def test_connection():
+def make_zoho_api_request(method, url, headers=None, params=None, data=None, json_data=None, retry_on_401=True):
 	"""
-	Test the Zoho Books API connection
+	Make a Zoho API request with automatic token refresh on 401 errors.
+	
+	Args:
+		method: HTTP method (GET, POST, PUT, DELETE)
+		url: API endpoint URL
+		headers: Request headers (will add Authorization if not present)
+		params: URL parameters
+		data: Form data
+		json_data: JSON data
+		retry_on_401: If True, automatically refresh token and retry on 401 error
+		
+	Returns:
+		Response object
 	"""
-	settings = frappe.get_doc(
-		"Zoho Books Settings", "Zoho Books Settings",
-	)
+	settings = frappe.get_doc("Zoho Books Settings", "Zoho Books Settings")
 	
 	if not settings.access_token:
 		frappe.throw(_("Access token not available. Please complete OAuth setup first."))
 	
-	access_token = settings.get_password("access_token")
+	# Get valid access token (will refresh if needed)
+	access_token = get_valid_access_token()
+	if not access_token:
+		frappe.throw(_("Failed to get valid access token. Please refresh manually or complete OAuth setup."))
+	
+	# Prepare headers
+	if headers is None:
+		headers = {}
+	
+	# Add authorization header if not present
+	if "Authorization" not in headers:
+		headers["Authorization"] = f"Zoho-oauthtoken {access_token}"
+	
+	# Make the request
+	try:
+		if method.upper() == "GET":
+			response = requests.get(url, headers=headers, params=params)
+		elif method.upper() == "POST":
+			response = requests.post(url, headers=headers, params=params, data=data, json=json_data)
+		elif method.upper() == "PUT":
+			response = requests.put(url, headers=headers, params=params, data=data, json=json_data)
+		elif method.upper() == "DELETE":
+			response = requests.delete(url, headers=headers, params=params)
+		else:
+			frappe.throw(_("Unsupported HTTP method: {0}").format(method))
+		
+		# If we get 401 and retry_on_401 is True, refresh token and retry once
+		if response.status_code == 401 and retry_on_401:
+			frappe.log_error(
+				title="Zoho API 401 Error - Auto Refreshing Token",
+				message=f"Received 401 error, attempting to refresh token and retry. URL: {url}"
+			)
+			
+			# Refresh token
+			refresh_result = refresh_access_token_internal()
+			if refresh_result.get("status") == "success":
+				# Update access token in headers
+				new_access_token = refresh_result.get("access_token")
+				headers["Authorization"] = f"Zoho-oauthtoken {new_access_token}"
+				
+				# Retry the request
+				if method.upper() == "GET":
+					response = requests.get(url, headers=headers, params=params)
+				elif method.upper() == "POST":
+					response = requests.post(url, headers=headers, params=params, data=data, json=json_data)
+				elif method.upper() == "PUT":
+					response = requests.put(url, headers=headers, params=params, data=data, json=json_data)
+				elif method.upper() == "DELETE":
+					response = requests.delete(url, headers=headers, params=params)
+			else:
+				# Refresh failed, raise the original 401 error
+				response.raise_for_status()
+		
+		return response
+		
+	except requests.exceptions.RequestException as e:
+		frappe.log_error(
+			title="Zoho API Request Error",
+			message=f"Request failed: {str(e)}\nURL: {url}\nMethod: {method}"
+		)
+		raise
+
+@frappe.whitelist()
+def refresh_access_token():
+	"""
+	Refresh the access token using refresh token (public API endpoint)
+	"""
+	return refresh_access_token_internal()
+
+
+@frappe.whitelist()
+def test_connection():
+	"""
+	Test the Zoho Books API connection with automatic token refresh
+	"""
+	settings = frappe.get_doc("Zoho Books Settings", "Zoho Books Settings")
+	
+	if not settings.access_token:
+		frappe.throw(_("Access token not available. Please complete OAuth setup first."))
 	
 	url = "https://www.zohoapis.com/books/v3/organizations"
-	headers = {
-		"Authorization": f"Zoho-oauthtoken {access_token}"
-	}
 	
 	try:
-		response = requests.get(url, headers=headers)
+		response = make_zoho_api_request("GET", url)
 		response.raise_for_status()
 		
 		organizations = response.json().get("organizations", [])

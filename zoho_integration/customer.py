@@ -5,6 +5,7 @@ import frappe
 import requests
 import json
 from frappe import _
+from zoho_integration.auth import make_zoho_api_request, get_valid_access_token
 
 
 @frappe.whitelist()
@@ -17,9 +18,6 @@ def get_zoho_customers_simple(organization_id=None, page=1, per_page=200):
 	if not settings.access_token:
 		frappe.throw(_("Access token not available. Please complete OAuth setup first."))
 	
-	# Get the decrypted access token
-	access_token = settings.get_password("access_token")
-	
 	# Use organization_id from settings if not provided
 	if not organization_id:
 		organization_id = settings.organization_id
@@ -29,7 +27,6 @@ def get_zoho_customers_simple(organization_id=None, page=1, per_page=200):
 	
 	url = "https://www.zohoapis.com/books/v3/contacts"
 	headers = {
-		"Authorization": f"Zoho-oauthtoken {access_token}",
 		"X-com-zoho-books-organizationid": str(organization_id)
 	}
 	
@@ -40,8 +37,7 @@ def get_zoho_customers_simple(organization_id=None, page=1, per_page=200):
 	}
 	
 	try:
-		response = requests.get(url, headers=headers, params=params)
-		
+		response = make_zoho_api_request("GET", url, headers=headers, params=params)
 		response.raise_for_status()
 		
 		customers_data = response.json()
@@ -95,9 +91,6 @@ def get_zoho_customers(organization_id=None, page=1, per_page=200, sync_from_dat
 	if not settings.access_token:
 		frappe.throw(_("Access token not available. Please complete OAuth setup first."))
 	
-	# Get the decrypted access token
-	access_token = settings.get_password("access_token")
-	
 	# Use organization_id from settings if not provided
 	if not organization_id:
 		organization_id = settings.organization_id
@@ -107,7 +100,6 @@ def get_zoho_customers(organization_id=None, page=1, per_page=200, sync_from_dat
 	
 	url = "https://www.zohoapis.com/books/v3/contacts"
 	headers = {
-		"Authorization": f"Zoho-oauthtoken {access_token}",
 		"X-com-zoho-books-organizationid": str(organization_id)
 	}
 	
@@ -118,20 +110,7 @@ def get_zoho_customers(organization_id=None, page=1, per_page=200, sync_from_dat
 	}
 	
 	try:
-		# Log the request details for debugging
-		frappe.log_error(
-			title="Zoho Customer API Debug",
-			message=f"Request URL: {url}\nHeaders: {headers}\nParams: {params}"
-		)
-		
-		response = requests.get(url, headers=headers, params=params)
-		
-		# Log response details for debugging
-		frappe.log_error(
-			title="Zoho Customer API Debug",
-			message=f"Response Status: {response.status_code}\nResponse Text: {response.text[:500]}"
-		)
-		
+		response = make_zoho_api_request("GET", url, headers=headers, params=params)
 		response.raise_for_status()
 		
 		customers_data = response.json()
@@ -379,8 +358,6 @@ def push_customer_to_zoho(customer_name):
 	if not settings.access_token:
 		frappe.throw(_("Access token not available. Please complete OAuth setup first."))
 	
-	# Get the decrypted access token
-	access_token = settings.get_password("access_token")
 	organization_id = settings.organization_id
 	
 	if not organization_id:
@@ -402,7 +379,6 @@ def push_customer_to_zoho(customer_name):
 		action = "created"
 	
 	headers = {
-		"Authorization": f"Zoho-oauthtoken {access_token}",
 		"X-com-zoho-books-organizationid": str(organization_id),
 		"Content-Type": "application/json"
 	}
@@ -434,11 +410,7 @@ def push_customer_to_zoho(customer_name):
 			contact_data["billing_address"] = billing_address
 	
 	try:
-		if method == "POST":
-			response = requests.post(url, headers=headers, data=json.dumps(contact_data))
-		else:
-			response = requests.put(url, headers=headers, data=json.dumps(contact_data))
-		
+		response = make_zoho_api_request(method, url, headers=headers, json_data=contact_data)
 		response.raise_for_status()
 		
 		contact_response = response.json()

@@ -5,6 +5,7 @@ import frappe
 import requests
 import json
 from frappe import _
+from zoho_integration.auth import make_zoho_api_request, get_valid_access_token
 
 
 @frappe.whitelist()
@@ -21,7 +22,6 @@ def create_zoho_contact(customer_name, email=None, phone=None, mobile=None, comp
 		)
 		return None
 	
-	access_token = settings.get_password("access_token")
 	organization_id = settings.organization_id
 	
 	if not organization_id:
@@ -33,7 +33,6 @@ def create_zoho_contact(customer_name, email=None, phone=None, mobile=None, comp
 	
 	url = "https://www.zohoapis.com/books/v3/contacts"
 	headers = {
-		"Authorization": f"Zoho-oauthtoken {access_token}",
 		"X-com-zoho-books-organizationid": str(organization_id),
 		"Content-Type": "application/json"
 	}
@@ -57,7 +56,7 @@ def create_zoho_contact(customer_name, email=None, phone=None, mobile=None, comp
 		contact_data["vendor_name"] = company_name
 	
 	try:
-		response = requests.post(url, headers=headers, data=json.dumps(contact_data))
+		response = make_zoho_api_request("POST", url, headers=headers, json_data=contact_data)
 		
 		if response.status_code == 201:
 			contact_response = response.json()
@@ -94,7 +93,6 @@ def find_zoho_contact_id(customer_name, email=None):
 	if not settings.access_token:
 		return None
 	
-	access_token = settings.get_password("access_token")
 	organization_id = settings.organization_id
 	
 	if not organization_id:
@@ -102,7 +100,6 @@ def find_zoho_contact_id(customer_name, email=None):
 	
 	url = "https://www.zohoapis.com/books/v3/contacts"
 	headers = {
-		"Authorization": f"Zoho-oauthtoken {access_token}",
 		"X-com-zoho-books-organizationid": str(organization_id)
 	}
 	
@@ -113,7 +110,7 @@ def find_zoho_contact_id(customer_name, email=None):
 	}
 	
 	try:
-		response = requests.get(url, headers=headers, params=params)
+		response = make_zoho_api_request("GET", url, headers=headers, params=params)
 		
 		if response.status_code == 200:
 			contacts_data = response.json()
@@ -234,7 +231,6 @@ def submit_zoho_invoice_for_approval(invoice_id, organization_id, access_token):
 	"""
 	url = f"https://www.zohoapis.com/books/v3/invoices/{invoice_id}/submit"
 	headers = {
-		"Authorization": f"Zoho-oauthtoken {access_token}",
 		"X-com-zoho-books-organizationid": str(organization_id),
 		"Content-Type": "application/json"
 	}
@@ -244,7 +240,7 @@ def submit_zoho_invoice_for_approval(invoice_id, organization_id, access_token):
 	}
 	
 	try:
-		response = requests.post(url, headers=headers, params=params)
+		response = make_zoho_api_request("POST", url, headers=headers, params=params)
 		
 		if response.status_code == 200:
 			submit_response = response.json()
@@ -284,7 +280,6 @@ def get_zoho_invoice_balance(invoice_id, organization_id, access_token):
 	"""
 	url = f"https://www.zohoapis.com/books/v3/invoices/{invoice_id}"
 	headers = {
-		"Authorization": f"Zoho-oauthtoken {access_token}",
 		"X-com-zoho-books-organizationid": str(organization_id)
 	}
 	
@@ -293,7 +288,7 @@ def get_zoho_invoice_balance(invoice_id, organization_id, access_token):
 	}
 	
 	try:
-		response = requests.get(url, headers=headers, params=params)
+		response = make_zoho_api_request("GET", url, headers=headers, params=params)
 		
 		if response.status_code == 200:
 			invoice_response = response.json()
@@ -389,7 +384,6 @@ def create_zoho_payment(invoice_doc, zoho_invoice_id, customer_id, organization_
 	
 	url = "https://www.zohoapis.com/books/v3/customerpayments"
 	headers = {
-		"Authorization": f"Zoho-oauthtoken {access_token}",
 		"X-com-zoho-books-organizationid": str(organization_id),
 		"Content-Type": "application/json"
 	}
@@ -423,7 +417,7 @@ def create_zoho_payment(invoice_doc, zoho_invoice_id, customer_id, organization_
 			payment_data["reference_number"] = payment_entry.reference_no
 	
 	try:
-		response = requests.post(url, headers=headers, params=params, data=json.dumps(payment_data))
+		response = make_zoho_api_request("POST", url, headers=headers, params=params, json_data=payment_data)
 		
 		if response.status_code == 201:
 			payment_response = response.json()
@@ -453,12 +447,10 @@ def create_zoho_invoice(invoice_doc, customer_id):
 	"""
 	settings = frappe.get_doc("Zoho Books Settings", "Zoho Books Settings")
 	
-	access_token = settings.get_password("access_token")
 	organization_id = settings.organization_id
 	
 	url = "https://www.zohoapis.com/books/v3/invoices"
 	headers = {
-		"Authorization": f"Zoho-oauthtoken {access_token}",
 		"X-com-zoho-books-organizationid": str(organization_id),
 		"Content-Type": "application/json"
 	}
@@ -508,7 +500,7 @@ def create_zoho_invoice(invoice_doc, customer_id):
 		invoice_data["tax_total"] = float(invoice_doc.total_taxes_and_charges)
 	
 	try:
-		response = requests.post(url, headers=headers, params=params, data=json.dumps(invoice_data))
+		response = make_zoho_api_request("POST", url, headers=headers, params=params, json_data=invoice_data)
 		
 		if response.status_code == 201:
 			invoice_response = response.json()
@@ -521,6 +513,8 @@ def create_zoho_invoice(invoice_doc, customer_id):
 			)
 			
 			# Create payment for the invoice if payment amount exists
+			# Get access token for payment creation
+			access_token = get_valid_access_token()
 			payment_result = create_zoho_payment(
 				invoice_doc, 
 				zoho_invoice_id, 
